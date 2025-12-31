@@ -1,0 +1,14 @@
+torch
+polars
+numpy
+datasets
+fastapi
+uvicorn
+prometheus-fastapi-instrumentator
+requests
+streamlit
+python-multipart
+kafka-python
+asyncpg
+psycopg2-binary
+prometheus-client

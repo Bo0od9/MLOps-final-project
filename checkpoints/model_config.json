@@ -1,0 +1,1 @@
+{"num_items": 939, "embedding_dim": 64, "num_heads": 2, "max_seq_len": 100, "num_transformer_layers": 2, "dropout_rate": 0.1}

@@ -1,0 +1,12 @@
+FROM python:3.9-slim
+
+WORKDIR /app
+
+RUN pip install dbt-postgres
+
+COPY dbt/ /app/dbt/
+WORKDIR /app/dbt
+
+RUN dbt deps --profiles-dir .
+
+CMD ["sh", "-c", "while true; do echo 'Running dbt...'; dbt run --profiles-dir .; echo 'Sleeping for 1 hour...'; sleep 3600; done"]

@@ -1,0 +1,169 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - sasrec-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - sasrec-net
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: sasrec
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: sasrec
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sasrec-net
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - POSTGRES_URL=postgresql://sasrec:password@postgres:5432/sasrec
+    depends_on:
+      - kafka
+      - postgres
+    networks:
+      - sasrec-net
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: [ "python", "worker/main.py" ]
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./checkpoints:/app/checkpoints
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - POSTGRES_URL=postgresql://sasrec:password@postgres:5432/sasrec
+      - PYTHONPATH=/app
+    depends_on:
+      - kafka
+      - postgres
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    networks:
+      - sasrec-net
+
+  db_writer:
+    build:
+      context: .
+      dockerfile: Dockerfile.db_writer
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - POSTGRES_URL=postgresql://sasrec:password@postgres:5432/sasrec
+    depends_on:
+      - kafka
+      - postgres
+    networks:
+      - sasrec-net
+
+  seeder:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command: [ "python", "/app/seed_data.py" ]
+    environment:
+      - POSTGRES_URL=postgresql://sasrec:password@postgres:5432/sasrec
+    depends_on:
+      - postgres
+    networks:
+      - sasrec-net
+
+  dbt:
+    build:
+      context: .
+      dockerfile: Dockerfile.dbt
+    depends_on:
+      - postgres
+    networks:
+      - sasrec-net
+
+  trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile.trainer
+    volumes:
+      - ./checkpoints:/app/checkpoints
+    environment:
+      - POSTGRES_URL=postgresql://sasrec:password@postgres:5432/sasrec
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - postgres
+    networks:
+      - sasrec-net
+    profiles:
+      - training
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+    networks:
+      - sasrec-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - sasrec-net
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+    networks:
+      - sasrec-net
+
+networks:
+  sasrec-net:
+    driver: bridge
+
+volumes:
+  postgres_data:

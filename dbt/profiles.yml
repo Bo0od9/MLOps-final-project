@@ -1,0 +1,12 @@
+sasrec_profile:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      threads: 4
+      host: postgres
+      port: 5432
+      user: sasrec
+      pass: password
+      dbname: sasrec
+      schema: public

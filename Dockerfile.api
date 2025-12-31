@@ -1,0 +1,23 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+
+RUN apt-get update && apt-get install -y --no-install-recommends gcc && \
+    pip install --no-cache-dir -r requirements.txt && \
+    apt-get purge -y --auto-remove gcc && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY src /app/src
+COPY api /app/api
+COPY worker /app/worker
+COPY checkpoints /app/checkpoints
+COPY seed_data.py /app/seed_data.py
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+EXPOSE 8000
+
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
